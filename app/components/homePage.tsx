@@ -13,7 +13,6 @@ import {
 import { useRouter } from "next/navigation";
 import { Bet, Match } from "../types";
 import { auth, db } from "../lib/firebase";
-import { pushAllMatchesToFirestore } from "../utils/match";
 
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -340,7 +339,7 @@ export default function HomePage() {
           <div className="bg-white/[0.05] border border-white/10 rounded-2xl p-5 division-y divide-white/10">
             {rankings.map((player, index) => (
               <div
-                key={player.uid}
+                key={player.uid as string}
                 className={`flex justify-between items-center py-3 text-sm ${
                   index !== rankings.length - 1
                     ? "border-b border-white/10"
@@ -350,11 +349,11 @@ export default function HomePage() {
                 <div className="flex items-center">
                   <span className="mr-2.5 font-bold">#{index + 1}</span>
                   <span className="truncate max-w-[150px] sm:max-w-none">
-                    {player.displayName}
+                    {player.displayName as string}
                   </span>
                 </div>
                 <div className="font-bold whitespace-nowrap">
-                  {player.points || 0} pts
+                  {(player.points as number) || 0} pts
                 </div>
               </div>
             ))}
