@@ -3,12 +3,10 @@
 import { useEffect, useState } from "react";
 import { signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
 import { auth, db, googleProvider } from "../lib/firebase";
 import { UserProfile } from "../types"; // Adjust layout path to your local types definitions
 
 export default function LoginPage() {
-  const router = useRouter();
   const [checkingRedirect, setCheckingRedirect] = useState(true);
 
   // 1. Listen for the user returning back from the Google Redirect flow
@@ -27,7 +25,7 @@ export default function LoginPage() {
           if (!userSnap.exists()) {
             const newUserData: UserProfile = {
               uid: user.uid,
-              email: user.email,
+              email: user.email || "",
               displayName: user.displayName || "Mickey Guest",
               photoURL: user.photoURL || "",
               createdAt: new Date().toISOString(),
