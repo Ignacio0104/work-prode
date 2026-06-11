@@ -1,38 +1,88 @@
 "use client";
 
-import { signInWithPopup, UserProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { auth, db, googleProvider } from "../lib/firebase";
+import { UserProfile } from "../types"; // Adjust layout path to your local types definitions
 
 export default function LoginPage() {
   const router = useRouter();
+  const [checkingRedirect, setCheckingRedirect] = useState(true);
 
+  // 1. Listen for the user returning back from the Google Redirect flow
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+
+        if (result?.user && result.user.email) {
+          const user = result.user;
+          const userRef = doc(db, "users", user.uid);
+
+          // Check if user already exists so we don't overwrite their points
+          const userSnap = await getDoc(userRef);
+
+          if (!userSnap.exists()) {
+            const newUserData: UserProfile = {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || "Mickey Guest",
+              photoURL: user.photoURL || "",
+              createdAt: new Date().toISOString(),
+              points: 0,
+            };
+            await setDoc(userRef, newUserData);
+          }
+
+          // 🔥 FIX: Force a hard reload navigation to the dashboard
+          // This bypasses Next.js client-side routing lockups
+          window.location.href = "/";
+          return;
+        }
+
+        // If the user is already authenticated but just navigated here manually, send them away
+        if (auth.currentUser) {
+          window.location.href = "/";
+          return;
+        }
+      } catch (error) {
+        console.error("Redirect Sign-in Error:", error);
+        alert(
+          "The magic encountered a glitch returning from Google. Try again!",
+        );
+      } finally {
+        // Turn off loading ONLY if we didn't find a user redirect payload
+        setCheckingRedirect(false);
+      }
+    };
+
+    handleRedirectResult();
+  }, []);
+
+  // 2. Button click handler simply kicks off the external redirect loop
   const handleGoogleLogin = async () => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      if (user && user.email) {
-        const userData: UserProfile = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || "Mickey Guest",
-          photoURL: user.photoURL || "",
-          createdAt: new Date().toISOString(),
-          points: 0,
-        };
-
-        const userRef = doc(db, "users", user.uid);
-        await setDoc(userRef, userData, { merge: true });
-
-        router.push("/");
-      }
+      await signInWithRedirect(auth, googleProvider);
     } catch (error) {
-      console.error(error);
-      alert("The magic encountered a glitch. Try again!");
+      console.error("Initiating Redirect Error:", error);
+      alert("Could not open Google Login. Try again!");
     }
   };
+
+  if (checkingRedirect) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0c1033] text-white font-sans">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffd700] mx-auto mb-4"></div>
+          <p className="text-sm text-gray-400">
+            Authenticating with the Magic Kingdom...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0c1033] via-[#1a276c] to-[#050821] text-white font-sans relative overflow-hidden">
@@ -45,15 +95,11 @@ export default function LoginPage() {
       <div className="bg-white/[0.07] backdrop-blur-xl border border-white/15 p-10 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.4),inset_0_1px_2px_rgba(255,255,255,0.2)] text-center max-w-[400px] w-[90%] z-10">
         {/* Decorative Mickey Ears Logo Representation */}
         <div className="flex justify-center items-center mb-4 relative h-[70px]">
-          {/* Main Head */}
           <div className="w-10 h-10 bg-[#ffd700] rounded-full shadow-[0_0_20px_rgba(255,215,0,0.6)] z-10" />
-          {/* Left Ear */}
-          <div className="w-6 h-6 bg-[#ffd700] rounded-full absolute -top-[3px] left-[129px] shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
-          {/* Right Ear */}
-          <div className="w-6 h-6 bg-[#ffd700] rounded-full absolute -top-[3px] right-[129px] shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+          <div className="w-6 h-6 bg-[#ffd700] rounded-full absolute -top-1 left-[32%] sm:left-[35%] shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
+          <div className="w-6 h-6 bg-[#ffd700] rounded-full absolute -top-1 right-[32%] sm:right-[35%] shadow-[0_0_15px_rgba(255,215,0,0.5)]" />
         </div>
 
-        {/* Text Items */}
         <h1 className="text-3xl font-extrabold mb-2 tracking-wide bg-gradient-to-r from-white to-[#b9c7ff] bg-clip-text text-transparent">
           Work Prode 2026
         </h1>
@@ -62,12 +108,10 @@ export default function LoginPage() {
           Unleash the magic. Place your world cup bets.
         </p>
 
-        {/* Auth Submission Action */}
         <button
           onClick={handleGoogleLogin}
           className="w-full py-3.5 px-6 text-base font-semibold rounded-xl bg-white text-[#0c1033] border-none shadow-[0_4px_15px_rgba(255,255,255,0.2)] transition-all duration-200 ease-in-out hover:bg-gray-50 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,255,255,0.3)] active:translate-y-0 flex items-center justify-center gap-2.5 cursor-pointer"
         >
-          {/* Clean Google SVG Graphic Markup */}
           <svg
             className="w-[18px] h-[18px] mr-1 flex-shrink-0"
             viewBox="0 0 24 24"
