@@ -13,6 +13,8 @@ import {
 import { useRouter } from "next/navigation";
 import { Bet, Match } from "../types";
 import { auth, db } from "../lib/firebase";
+import { WORLD_CUP_CITY_TIMEZONES } from "../utils/match";
+import { DateTime } from "luxon";
 
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -53,7 +55,11 @@ export default function HomePage() {
 
     const unsubMatches = onSnapshot(collection(db, "matches"), (snapshot) => {
       const matchData = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as Match,
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as Match, // 👈 The country is now part of this explicit data mapping payload
       );
       setMatches(matchData);
     });
@@ -100,11 +106,32 @@ export default function HomePage() {
       return;
     }
 
-    const matchStartTime = new Date(targetMatch.date).getTime();
-    const currentTime = Date.now();
+    // 1. Precise absolute global comparison (UTC Epoch Milliseconds)
+    const matchStartTime = (
+      DateTime.fromISO(targetMatch.date, {
+        setZone: true,
+      }).toISO() || ""
+    ).slice(0, -5);
 
-    if (currentTime >= matchStartTime) {
-      alert("🛑 Kickoff has passed! Predictions for this fixture are closed.");
+    const venueTimeZone =
+      WORLD_CUP_CITY_TIMEZONES[targetMatch.city || "America/New_York"];
+
+    const currentTime = (
+      DateTime.now().setZone(venueTimeZone).toISO() || ""
+    ).slice(0, -10);
+
+    if (currentTime > matchStartTime) {
+      // 2. Format the deadline to the user's local device browser timezone
+      const userLocalTimeStr = DateTime.now();
+
+      // 3. Fallback: Format the deadline to the match venue's local stadium time
+      const venueTimeStr = currentTime;
+
+      alert(
+        `🛑 Kickoff has passed! Predictions for this fixture are closed.\n\n` +
+          `📅 Kickoff was at: ${userLocalTimeStr} (Your Local Time)` +
+          (venueTimeStr ? ` / ${venueTimeStr}` : ""),
+      );
       return;
     }
 
