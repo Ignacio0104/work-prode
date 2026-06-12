@@ -2,24 +2,32 @@ import { collection, doc, writeBatch } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { Bet, Match } from "../types";
 
+export const WORLD_CUP_CITY_TIMEZONES: Record<string, string> = {
+  // 🇺🇸 United States
+  Atlanta: "America/New_York",
+  Boston: "America/New_York",
+  Dallas: "America/Chicago",
+  Houston: "America/Chicago",
+  "Kansas City": "America/Chicago",
+  "Los Angeles": "America/Los_Angeles",
+  Miami: "America/New_York",
+  "New York / New Jersey": "America/New_York",
+  Philadelphia: "America/New_York",
+  "San Francisco Bay Area": "America/Los_Angeles",
+  Seattle: "America/Los_Angeles",
+
+  // 🇲🇽 Mexico
+  Guadalajara: "America/Mexico_City",
+  "Mexico City": "America/Mexico_City",
+  Monterrey: "America/Monterrey",
+
+  // 🇨🇦 Canada
+  Toronto: "America/Toronto",
+  Vancouver: "America/Vancouver",
+};
+
 // Public open dataset for the 104 fixtures of World Cup 2026
 const data = [
-  {
-    match_number: 1,
-    stage: "Group Stage",
-    group: "A",
-    date: "2026-06-11",
-    time_et: "15:00",
-    time_local: "13:00",
-    team_a: "Mexico",
-    team_b: "South Africa",
-    venue: "Estadio Azteca",
-    city: "Mexico City",
-    country: "Mexico",
-    status: "confirmed_group_fixture",
-    source:
-      "https://www.roadtrips.com/world-cup/2026-world-cup-packages/schedule/",
-  },
   {
     match_number: 2,
     stage: "Group Stage",
@@ -1674,19 +1682,12 @@ const data = [
 //   console.log("🚀 Loading local 2026 fixture list...");
 
 //   try {
-//     // 2. Use the imported local JSON array directly
-//     // If your JSON is a direct array of matches, use localDataset.
-//     // If it's wrapped in an object, use localDataset.matches.
 //     const rawMatches: any[] = data;
 
 //     if (rawMatches.length === 0) {
 //       console.error("❌ No matches found in the local dataset.");
 //       return;
 //     }
-
-//     console.log(
-//       `📥 Mapped ${rawMatches.length} matches. Preparing Firestore batches...`,
-//     );
 
 //     const matchesCollection = collection(db, "matches");
 //     const chunkSize = 50;
@@ -1695,45 +1696,74 @@ const data = [
 //       const batch = writeBatch(db);
 //       const currentChunk = rawMatches.slice(i, i + chunkSize);
 
-//       // 3. Typings updated here from 'any' to 'MatchFixture'
-//       currentChunk.forEach((match: Match) => {
-//         // Use the actual match_number from the JSON, padded to 3 digits (e.g., match_005)
+//       currentChunk.forEach((match: any) => {
 //         const customId = `match_${String(match.match_number).padStart(3, "0")}`;
 
-//         // 4. Clean mapping using the exact keys from your new interface
+//         // 1. Fall back to standard Eastern time map identifier if city isn't mapped
+//         const cityKey = match.city || "";
+//         const venueTimezone =
+//           WORLD_CUP_CITY_TIMEZONES[cityKey] || "America/New_York";
+
+//         // 2. Safely parse the raw string date combining the match's target city context
+//         let absoluteUtcDateString = new Date().toISOString();
+
+//         if (match.date && match.time_local) {
+//           // Construct an ISO-like string using the local stadium time: "2026-06-11T16:00:00"
+//           const localDateTimeString = `${match.date}T${match.time_local}:00`;
+
+//           try {
+//             // Use native Intl tracking to safely convert the local time string into an absolute UTC Date instance
+//             const dynamicDate = new Date(
+//               new Intl.DateTimeFormat("en-US", {
+//                 timeZone: venueTimezone,
+//                 year: "numeric",
+//                 month: "numeric",
+//                 day: "numeric",
+//                 hour: "numeric",
+//                 minute: "numeric",
+//                 second: "numeric",
+//                 hour12: false,
+//               }).format(new Date(localDateTimeString)),
+//             );
+
+//             absoluteUtcDateString = dynamicDate.toISOString();
+//           } catch (e) {
+//             // Fallback parsing engine logic if internationalization formats miss structural details
+//             // E.g., using your data's explicit 'time_et' key with the default east coast offset
+//             absoluteUtcDateString = new Date(
+//               `${match.date}T${match.time_et || "12:00"}:00-04:00`,
+//             ).toISOString();
+//           }
+//         }
+
 //         const matchDoc: Match = {
 //           id: customId,
+//           match_number: Number(match.match_number),
 //           teamOne: match.team_a || "TBD",
 //           teamTwo: match.team_b || "TBD",
-//           date:
-//             match.date && match.time_et
-//               ? `${match.date}T${match.time_et}:00Z` // Combines YYYY-MM-DD and HH:MM into an ISO string
-//               : new Date().toISOString(),
+//           date: absoluteUtcDateString, // 🔥 Perfectly converted true ISO UTC string
 //           status: "scheduled",
 //           hasResult: false,
-//           // You can expand your Firestore Match model to include these if you want:
-//           // venue: match.venue,
-//           // stage: match.stage,
-//           // group: match.group,
+//           country: match.country || "TBD",
+//           venue: match.venue || "",
+//           city: cityKey,
+//           stage: match.stage || "",
+//           group: match.group || "",
 //         };
 
 //         const docRef = doc(matchesCollection, customId);
 //         batch.set(docRef, matchDoc);
 //       });
 
-//       // Commit the chunk to Firebase
 //       await batch.commit();
-//       console.log(
-//         `📦 Committed matches ${i + 1} to ${Math.min(i + chunkSize, rawMatches.length)}`,
-//       );
 //     }
 
 //     alert(
-//       `✨ All ${rawMatches.length} matches successfully pushed to your Firestore database!`,
+//       `✨ All ${rawMatches.length} matches successfully re-synchronized with native timezones!`,
 //     );
 //   } catch (error: any) {
 //     console.error("❌ Failed to push matches:", error);
-//     alert(`Error populating database: ${error.message}`);
+//     alert(`Error: ${error.message}`);
 //   }
 // }
 
